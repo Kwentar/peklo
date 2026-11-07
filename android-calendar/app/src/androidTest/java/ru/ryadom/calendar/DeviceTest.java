@@ -5,6 +5,7 @@ import org.junit.Test;import org.junit.runner.RunWith;import org.json.*;import j
 @RunWith(AndroidJUnit4.class)
 public class DeviceTest {
  @Test public void notificationQueueAndScreens()throws Exception {
+  assertTrue("Synthetic data tests require a dedicated emulator",android.os.Build.HARDWARE.equals("ranchu")||android.os.Build.HARDWARE.equals("goldfish"));
   android.app.Instrumentation ins=InstrumentationRegistry.getInstrumentation();Context c=ins.getTargetContext();Notices.channels(c);
   // This test runs on a clean test emulator only. Use synthetic local events.
   long start=LocalDate.now(Event.ZONE).atTime(13,0).atZone(Event.ZONE).toInstant().toEpochMilli();if(start<System.currentTimeMillis())start+=86400000L;

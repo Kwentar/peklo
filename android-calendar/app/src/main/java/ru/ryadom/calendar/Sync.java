@@ -15,7 +15,7 @@ public class Sync {
      Iterator<String> keys=seen.keys();List<String> expired=new ArrayList<>();while(keys.hasNext()){String key=keys.next();if(seen.optLong(key)<now-90*86400000L)expired.add(key);}for(String key:expired)seen.remove(key);
      JSONObject calendars=new JSONObject();for(Map.Entry<String,String> cal:result.calendars.entrySet())calendars.put(cal.getKey(),cal.getValue());
      if(data.optBoolean("newEvents",true)){JSONObject pending=Store.object(data,"pendingNew");for(Event event:additions)pending.put(event.key(),event.json());data.put("pendingNew",pending);}
-     statuses.put(id,new JSONObject().put("newEventsDetected",additions.size()).put("initialImport",first).put("success",now).put("error","").put("rangeEnd",to).put("calendars",calendars));data.put("statuses",statuses).put("events",merged).put("seen",seen);
+     statuses.put(id,new JSONObject().put("newEventsDetected",additions.size()).put("initialImport",first).put("success",now).put("error","").put("rangeStart",from).put("rangeEnd",to).put("calendars",calendars));data.put("statuses",statuses).put("events",merged).put("seen",seen);
     });
     if(!additions.isEmpty())Notices.flushNew(c);
    }catch(Exception failure){boolean halt=failure instanceof Providers.Failure&&((Providers.Failure)failure).auth;String message=failure instanceof Providers.Failure?failure.getMessage():"Не удалось обновить: проверьте сеть, VPN или доступ к календарю.";
