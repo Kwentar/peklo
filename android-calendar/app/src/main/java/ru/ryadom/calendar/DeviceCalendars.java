@@ -31,7 +31,7 @@ final class DeviceCalendars {
   Map<String,Integer> instances=new TreeMap<>();Set<String> matchingInstances=new HashSet<>();
   String basicStatus="OK",detailStatus="OK",instanceStatus="OK";boolean workProfile;int sdk;
   String text(String query){
-   StringBuilder s=new StringBuilder("Пекло 0.4.1 · диагностика календарей\nAndroid API ").append(sdk).append("\nПрофиль: ").append(workProfile?"рабочий":"личный");
+   StringBuilder s=new StringBuilder("Пекло 0.4.2 · диагностика календарей\nAndroid API ").append(sdk).append("\nПрофиль: ").append(workProfile?"рабочий":"личный");
    s.append("\nЧтение без фильтров: ").append(basicStatus).append(" · ").append(basic.size()).append(" календарей");
    s.append("\nРасширенное чтение: ").append(detailStatus).append(" · ").append(details.size()).append(" календарей");
    if(!query.trim().isEmpty())s.append("\nСовпадений с введённым названием: ").append(basic.stream().filter(e->e.matches(query)).count()).append(" / ").append(details.stream().filter(e->e.matches(query)).count()).append(" / ").append(matchingInstances.size()).append(" (список / расширенный / события)");

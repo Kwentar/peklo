@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 import requests
+import vault
 from ews import fetch_events as fetch_ews, EWSError, normalize_endpoint
 from yandex import fetch_events as fetch_yandex
 from ics import parse_events,fetch_calendar
@@ -16,6 +17,22 @@ credentials={};versions={};providers={}
 for key,name in [('ews','Работа · Exchange'),('yandex','Яндекс'),('ics','ICS')]:
     versions[key]=0
     providers[key]=dict(id=key,name=name,connected=False,busy=False,checked=None,success=None,next=None,error=None,events=[],calendars=[],history=[],checks=0,digest=None,due=0,rangeStart=None,rangeEnd=None)
+
+def restore_connections():
+    with lock:
+        for key in providers:
+            try:
+                config=vault.load(key)
+                if config is None:continue
+                if key=='ews':config['endpoint']=normalize_endpoint(config.get('endpoint'))
+                if key in ('ews','yandex') and not all(isinstance(config.get(k),str) and config[k] for k in ('login','password')):raise ValueError()
+                if key=='ics':
+                    parsed=urlparse(config.get('url',''))
+                    if parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password:raise ValueError()
+                credentials[key]=config
+                providers[key].update(connected=True,error=None,due=0)
+            except Exception:
+                providers[key].update(connected=False,error='Сохранённое подключение не восстановлено. Проверьте доступ к хранилищу ОС или подключитесь заново.')
 
 def now():return datetime.now(TZ).isoformat()
 
@@ -114,6 +131,8 @@ class Handler(BaseHTTPRequestHandler):
                     try:config['endpoint']=normalize_endpoint(data.get('endpoint'))
                     except EWSError as e:return self.send({'error':str(e)},400)
             with lock:
+                try:vault.save(key,config)
+                except vault.VaultError as e:return self.send({'error':str(e)},503)
                 versions[key]+=1;credentials[key]=config
                 providers[key].update(connected=True,error=None,events=[],calendars=[],history=[],checks=0,success=None,checked=None,digest=None,due=0,next=None,rangeStart=None,rangeEnd=None)
         elif self.path in ('/api/refresh','/api/stop'):
@@ -123,11 +142,14 @@ class Handler(BaseHTTPRequestHandler):
                 for key in ([selected] if selected else list(providers)):
                     if self.path=='/api/refresh':providers[key]['due']=0
                     else:
+                        try:vault.delete(key)
+                        except vault.VaultError as e:return self.send({'error':str(e)},503)
                         versions[key]+=1;credentials.pop(key,None);providers[key].update(connected=False,events=[],calendars=[],error=None,next=None,success=None)
         else:return self.send({},404)
         self.send({'ok':True})
 
 if __name__=='__main__':
+    restore_connections()
     for key in providers:threading.Thread(target=worker,args=(key,),daemon=True).start()
     print(f'Calendar: http://127.0.0.1:{PORT}',flush=True)
     ThreadingHTTPServer(('127.0.0.1',PORT),Handler).serve_forever()

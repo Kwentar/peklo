@@ -68,6 +68,6 @@ final class DeviceCalendarPicker {
  void add(){
   if(selected.isEmpty()){a.toast("Выберите календарь");return;}
   JSONArray choice=new JSONArray();for(String id:selected)choice.put(id);
-  Store.edit(a,data->{JSONArray accounts=Store.array(data,"accounts");accounts.put(new JSONObject().put("id",UUID.randomUUID().toString()).put("type","device").put("calendarIds",choice).put("active",true));data.put("accounts",accounts);});dialog.dismiss();a.render();Sync.async(a);
+  Store.edit(a,data->{JSONArray accounts=Store.array(data,"accounts");accounts.put(new JSONObject().put("id",UUID.randomUUID().toString()).put("type","device").put("calendarIds",choice).put("active",true));data.put("accounts",accounts);});dialog.dismiss();SyncJob.watch(a);a.render();Sync.async(a);
  }
 }

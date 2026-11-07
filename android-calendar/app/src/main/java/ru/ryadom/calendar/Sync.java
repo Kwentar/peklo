@@ -10,11 +10,14 @@ public class Sync {
    try{Providers.Result result=Providers.load(c,account,from,to);List<Event> additions=new ArrayList<>();
     Store.edit(c,data->{boolean exists=false;for(int j=0;j<Store.array(data,"accounts").length();j++)if(Store.array(data,"accounts").getJSONObject(j).getString("id").equals(id))exists=true;if(!exists)return;
      JSONObject statuses=Store.object(data,"statuses"),old=statuses.optJSONObject(id);long previousEnd=old==null?0:old.optLong("rangeEnd");boolean first=old==null||old.optLong("success")==0;
+     List<Event> previous=new ArrayList<>();for(int j=0;j<Store.array(data,"events").length();j++){Event e=Event.from(Store.array(data,"events").getJSONObject(j));if(e.source.equals(id))previous.add(e);}
+     JSONObject moves=Store.object(data,"pendingMoves");
      JSONObject seen=Store.object(data,"seen"),hidden=Store.object(data,"hidden");long now=System.currentTimeMillis();JSONArray merged=new JSONArray();for(int j=0;j<Store.array(data,"events").length();j++){JSONObject e=Store.array(data,"events").getJSONObject(j);if(!e.optString("source").equals(id))merged.put(e);}
-     for(Event e:result.events){if(!first&&!seen.has(e.key())&&e.start<previousEnd&&e.end>now&&!e.isCancelled(account.optString("type"))&&!hidden.optBoolean(id+"|"+e.calendar))additions.add(e);seen.put(e.key(),now);merged.put(e.json());}
+     for(Event e:result.events){Event before=Moves.previous(e,previous,result.events,account.optString("type"));boolean moved=before!=null&&Moves.changed(before,e);if(!first&&moved&&data.optBoolean("moves",true)&&e.end>now&&!e.isCancelled(account.optString("type"))&&!hidden.optBoolean(id+"|"+e.calendar)){JSONObject queued=moves.optJSONObject(before.key());if(!before.key().equals(e.key()))moves.remove(before.key());moves.put(e.key(),new JSONObject().put("before",queued==null?before.json():queued.getJSONObject("before")).put("after",e.json()));}if(!first&&!moved&&!seen.has(e.key())&&e.start<previousEnd&&e.end>now&&!e.isCancelled(account.optString("type"))&&!hidden.optBoolean(id+"|"+e.calendar))additions.add(e);seen.put(e.key(),now);merged.put(e.json());}
      Iterator<String> keys=seen.keys();List<String> expired=new ArrayList<>();while(keys.hasNext()){String key=keys.next();if(seen.optLong(key)<now-90*86400000L)expired.add(key);}for(String key:expired)seen.remove(key);
      JSONObject calendars=new JSONObject();for(Map.Entry<String,String> cal:result.calendars.entrySet())calendars.put(cal.getKey(),cal.getValue());
      if(data.optBoolean("newEvents",true)){JSONObject pending=Store.object(data,"pendingNew");for(Event event:additions)pending.put(event.key(),event.json());data.put("pendingNew",pending);}
+     data.put("pendingMoves",moves);
      statuses.put(id,new JSONObject().put("newEventsDetected",additions.size()).put("initialImport",first).put("success",now).put("error","").put("rangeStart",from).put("rangeEnd",to).put("calendars",calendars));data.put("statuses",statuses).put("events",merged).put("seen",seen);
     });
     if(!additions.isEmpty())Notices.flushNew(c);
@@ -22,6 +25,7 @@ public class Sync {
     Store.edit(c,data->{JSONObject statuses=Store.object(data,"statuses"),status=statuses.optJSONObject(id);if(status==null)status=new JSONObject();status.put("error",message);statuses.put(id,status);data.put("statuses",statuses);if(halt){JSONArray arr=Store.array(data,"accounts");for(int j=0;j<arr.length();j++)if(arr.getJSONObject(j).optString("id").equals(id))arr.getJSONObject(j).put("active",false);}});
    }
   }
+  Notices.flushMoves(c);
   Notices.flushNew(c);
   Notices.schedule(c);
  }catch(Exception ignored){}finally{busy.set(false);try{TodayWidget.refresh(c);}catch(Exception ignored){}c.sendBroadcast(new Intent(UPDATED).setPackage(c.getPackageName()));}}

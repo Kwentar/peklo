@@ -12,9 +12,10 @@ class ConnectionTests(unittest.TestCase):
         self.port=self.server.server_address[1]
         self.port_patch=patch.object(app,'PORT',self.port);self.port_patch.start()
         self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
+        self.vault_patch=patch('app.vault.save');self.vault_patch.start()
         app.credentials.clear()
     def tearDown(self):
-        self.server.shutdown();self.server.server_close();self.thread.join();self.port_patch.stop();app.credentials.clear()
+        self.server.shutdown();self.server.server_close();self.thread.join();self.port_patch.stop();self.vault_patch.stop();app.credentials.clear()
     def post(self,body,token=None):
         c=http.client.HTTPConnection('127.0.0.1',self.port)
         c.request('POST','/api/connect-ews',json.dumps(body),{'X-App-Token':app.TOKEN if token is None else token,'Content-Type':'application/json'})
