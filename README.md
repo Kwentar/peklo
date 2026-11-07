@@ -7,7 +7,7 @@
 - [Android-клиент](android-calendar/README.md) — Exchange, Яндекс, системные календари Android (включая Google).
 - [Правила](AGENTS.md), [запросы](REQUESTS.md), [спецификация](SPEC.md), [бэклог](BACKLOG.md), [изменения](CHANGELOG.md), [проверки](RUNLOG.md).
 
-Оба клиента — один самостоятельный Git-репозиторий. Удалённый URL пока не задан, публикация не выполнена. Карточка мета-проекта: `projects/peklo/README.md`, ключ локальных настроек `projects.peklo`. Внешние URL документов будут добавлены после выбора remote.
+Оба клиента — один самостоятельный [репозиторий GitHub](https://github.com/Kwentar/peklo), ветка `main`. SSH: `git@github.com:Kwentar/peklo.git`. Карточка мета-проекта: `projects/peklo/README.md`, ключ локальных настроек `projects.peklo`; мета-проект распространяется отдельно.
 
 ## Запуск веба — macOS
 Нужен Python 3.9+ (для новой установки рекомендуется 3.11+) и pip. Из корня репозитория:
