@@ -15,6 +15,10 @@ public class MoveSyncTest {
    JSONArray events=Store.array(Store.read(c),"events");assertEquals(1,events.length());assertEquals(start-86400000,events.getJSONObject(0).getLong("start"));assertEquals(0,Store.object(Store.read(c),"pendingNew").length());
    android.service.notification.StatusBarNotification[] notices=manager.getActiveNotifications();assertEquals(1,notices.length);assertEquals(Notices.MOVED,notices[0].getTag());String text=notices[0].getNotification().extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString();assertTrue(text.contains(" → "));assertTrue(text.contains("15:00–16:00"));
    manager.cancelAll();Sync.run(c);assertEquals(0,manager.getActiveNotifications().length);
+   v=new ContentValues();v.put("dtstart",start+90L*86400000);v.put("dtend",start+90L*86400000+3600000);c.getContentResolver().update(event,v,null,null);Sync.run(c);assertEquals(0,Store.array(Store.read(c),"events").length());assertEquals("A move outside the query window is not a cancellation",0,manager.getActiveNotifications().length);
+   v=new ContentValues();v.put("dtstart",start);v.put("dtend",start+3600000);c.getContentResolver().update(event,v,null,null);Sync.run(c);manager.cancelAll();
+   c.getContentResolver().delete(event,null,null);Sync.run(c);assertEquals(0,Store.array(Store.read(c),"events").length());notices=manager.getActiveNotifications();assertEquals(1,notices.length);assertEquals(Notices.CANCELLED,notices[0].getTag());assertEquals("Встреча отменена",notices[0].getNotification().extras.getString(Notification.EXTRA_TITLE));assertTrue(notices[0].getNotification().extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString().contains("Synthetic move"));manager.cancelAll();Sync.run(c);assertEquals(0,manager.getActiveNotifications().length);
+
   }finally{Store.edit(c,d->d.put("accounts",new JSONArray()).put("events",new JSONArray()));if(calendar>=0)c.getContentResolver().delete(helper.calendarUri(),"_id=?",new String[]{String.valueOf(calendar)});ins.getUiAutomation().dropShellPermissionIdentity();}
  }
 }

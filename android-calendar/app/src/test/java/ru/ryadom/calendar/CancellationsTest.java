@@ -1,0 +1,8 @@
+package ru.ryadom.calendar;
+import org.junit.Test;import java.util.*;import static org.junit.Assert.*;
+public class CancellationsTest {
+ Event event(String id){Event e=new Event();e.id=id;e.source="source";e.calendar="cal";e.title="Review";e.start=10000;e.end=20000;return e;}
+ @Test public void removedEventIsCandidateButMoveIsNot(){Event old=event("42|10000"),moved=event("42|12000");moved.start=12000;assertEquals(1,Cancellations.missing(List.of(old),List.of(),"device",0,30000,1000,Set.of("cal")).size());assertTrue(Cancellations.missing(List.of(old),List.of(moved),"device",0,30000,1000,Set.of("cal")).isEmpty());}
+ @Test public void cancelledPastOutOfRangeAndRemovedCalendarAreSkipped(){Event e=event("1");e.cancelled=true;assertTrue(Cancellations.missing(List.of(e),List.of(),"ews",0,30000,1000,Set.of("cal")).isEmpty());e.cancelled=false;assertTrue(Cancellations.missing(List.of(e),List.of(),"ews",0,30000,21000,Set.of("cal")).isEmpty());assertTrue(Cancellations.missing(List.of(e),List.of(),"ews",0,9000,1000,Set.of("cal")).isEmpty());assertTrue(Cancellations.missing(List.of(e),List.of(),"ews",0,30000,1000,Set.of()).isEmpty());}
+ @Test public void exchangePrefixesAndStatusNotifyOnce(){Event old=event("1"),after=event("1");for(String prefix:List.of("Отменено:","Canceled:","Cancelled:")){after.title=prefix+" Review";assertTrue(Cancellations.newlyCancelled(old,after,"ews",1000));assertFalse(Cancellations.newlyCancelled(old,after,"device",1000));assertFalse(Cancellations.newlyCancelled(after,after,"ews",1000));}after.cancelled=true;assertTrue(Cancellations.newlyCancelled(old,after,"device",1000));assertFalse(Cancellations.newlyCancelled(null,after,"ews",1000));}
+}

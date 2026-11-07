@@ -1,0 +1,11 @@
+package ru.ryadom.calendar;
+import android.app.*;import android.content.*;import android.os.Build;import androidx.test.ext.junit.runners.AndroidJUnit4;import androidx.test.platform.app.InstrumentationRegistry;import org.junit.Test;import org.junit.runner.RunWith;import org.json.*;import static org.junit.Assert.*;
+@RunWith(AndroidJUnit4.class)
+public class CancellationNoticeTest {
+ @Test public void exchangeTitleCancellationNotificationUsesOriginalTitle()throws Exception{
+  assertTrue(Build.HARDWARE.equals("ranchu")||Build.HARDWARE.equals("goldfish"));Instrumentation ins=InstrumentationRegistry.getInstrumentation();Context c=ins.getTargetContext();ins.getUiAutomation().adoptShellPermissionIdentity("android.permission.POST_NOTIFICATIONS");
+  try{Event before=new Event();before.source="cancel-test";before.calendar="main";before.id="event";before.title="Synthetic review";before.start=System.currentTimeMillis()+86400000;before.end=before.start+3600000;Event after=Event.from(before.json());after.title="Отменено: Synthetic review";assertTrue(Cancellations.newlyCancelled(before,after,"ews",System.currentTimeMillis()));
+   Store.edit(c,d->{d.put("accounts",new JSONArray().put(new JSONObject().put("id",before.source).put("type","ews").put("active",false)));d.put("events",new JSONArray().put(after.json()));d.put("cancellations",true);d.put("pendingCancellations",new JSONObject().put(before.key(),before.json()));});NotificationManager manager=c.getSystemService(NotificationManager.class);manager.cancelAll();Notices.flushCancellations(c);assertEquals(1,manager.getActiveNotifications().length);Notification n=manager.getActiveNotifications()[0].getNotification();assertEquals("Встреча отменена",n.extras.getString(Notification.EXTRA_TITLE));String text=n.extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString();assertTrue(text.contains(before.title));assertTrue(text.contains(Moves.interval(before)));assertFalse(text.contains("Отменено:"));manager.cancelAll();Notices.flushCancellations(c);assertEquals(0,manager.getActiveNotifications().length);
+  }finally{ins.getUiAutomation().dropShellPermissionIdentity();Store.edit(c,d->d.put("accounts",new JSONArray()).put("events",new JSONArray()).put("pendingCancellations",new JSONObject()));}
+ }
+}
