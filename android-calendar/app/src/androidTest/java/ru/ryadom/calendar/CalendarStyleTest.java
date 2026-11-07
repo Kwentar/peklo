@@ -1,0 +1,18 @@
+package ru.ryadom.calendar;
+import android.app.*;import android.content.*;import android.os.Build;import android.view.*;import android.widget.*;import androidx.test.ext.junit.runners.AndroidJUnit4;import androidx.test.platform.app.InstrumentationRegistry;import org.junit.Test;import org.junit.runner.RunWith;import org.json.*;import static org.junit.Assert.*;
+@RunWith(AndroidJUnit4.class)
+public class CalendarStyleTest {
+ View find(View v,String text){if(v instanceof TextView&&((TextView)v).getText().toString().contains(text))return v;if(v instanceof ViewGroup)for(int i=0;i<((ViewGroup)v).getChildCount();i++){View found=find(((ViewGroup)v).getChildAt(i),text);if(found!=null)return found;}return null;}
+ @Test public void customCalendarAppearanceAndVersion()throws Exception{
+  assertTrue(Build.HARDWARE.equals("ranchu")||Build.HARDWARE.equals("goldfish"));Instrumentation ins=InstrumentationRegistry.getInstrumentation();Context c=ins.getTargetContext();
+  Store.edit(c,d->{d.put("accounts",new JSONArray().put(new JSONObject().put("id","style-test").put("type","device").put("active",false)));d.put("events",new JSONArray());d.put("calendarStyles",new JSONObject());d.put("statuses",new JSONObject().put("style-test",new JSONObject().put("success",System.currentTimeMillis()).put("calendars",new JSONObject().put("calendar","Original calendar"))));});
+  MainActivity a=(MainActivity)ins.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));AlertDialog[] dialog={null};
+  ins.runOnMainSync(()->{a.switchPage("settings");assertNotNull(find(a.root,"0.4.3 · сборка 7"));});new UiTest().screenshot(ins,"version-settings");
+  ins.runOnMainSync(()->{a.switchPage("accounts");dialog[0]=a.editCalendar("style-test","calendar");((EditText)dialog[0].getWindow().getDecorView().findViewWithTag("calendar-alias")).setText("Мой календарь");find(dialog[0].getWindow().getDecorView(),"Оранжевый").performClick();});new UiTest().screenshot(ins,"calendar-style-editor");
+  ins.runOnMainSync(()->dialog[0].getButton(AlertDialog.BUTTON_POSITIVE).performClick());JSONObject saved=Store.read(c);assertEquals("Мой календарь",CalendarStyle.name(saved,"style-test","calendar"));assertEquals(6,CalendarStyle.color(saved,"style-test","calendar"));assertEquals("Original calendar",Store.object(Store.object(saved,"statuses").getJSONObject("style-test"),"calendars").getString("calendar"));
+  Event event=new Event();event.id="style-event";event.source="style-test";event.calendar="calendar";event.title="Synthetic styled event";event.start=java.time.LocalDate.now(Event.ZONE).atTime(15,0).atZone(Event.ZONE).toInstant().toEpochMilli();event.end=event.start+3600000;Store.edit(c,d->d.put("events",new JSONArray().put(event.json())));
+  ins.runOnMainSync(()->{View widget=TodayWidget.build(c,321,java.time.LocalDate.now(Event.ZONE),Store.read(c),700).apply(c,new LinearLayout(c));View card=widget.findViewById(R.id.event_root);assertNotNull(card);assertEquals(CalendarStyle.FILLS[6],((android.graphics.drawable.GradientDrawable)card.getBackground()).getColor().getDefaultColor());assertTrue(((TextView)widget.findViewById(R.id.event_time)).getText().toString().contains("Мой календарь"));});
+  ins.runOnMainSync(()->{a.render();assertNotNull(find(a.root,"Мой календарь"));});new UiTest().screenshot(ins,"calendar-style-saved");
+  ins.runOnMainSync(()->{dialog[0]=a.editCalendar("style-test","calendar");dialog[0].getButton(AlertDialog.BUTTON_NEUTRAL).performClick();});ins.waitForIdleSync();assertEquals("Original calendar",CalendarStyle.name(Store.read(c),"style-test","calendar"));assertEquals(1,CalendarStyle.color(Store.read(c),"style-test","calendar"));ins.runOnMainSync(a::finish);
+ }
+}
