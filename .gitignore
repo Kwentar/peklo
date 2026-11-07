@@ -1,0 +1,45 @@
+# Local configuration and secrets
+local.yaml
+local.properties
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.mobileprovision
+id_rsa*
+id_ed25519*
+# OS / IDE
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+# Environments, generated artifacts, runtime state
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.cache/
+.gradle/
+tooling/
+**/build/
+**/dist/
+*.apk
+*.aab
+*.class
+*.dex
+*.log
+logs/
+data/
+*.enc
+*.db
+*.sqlite*
+*.ics
+coverage/
+tmp/

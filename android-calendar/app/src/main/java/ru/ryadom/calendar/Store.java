@@ -1,0 +1,14 @@
+package ru.ryadom.calendar;
+import android.content.*;import android.security.keystore.*;import android.util.AtomicFile;
+import java.io.*;import java.security.*;import javax.crypto.*;import javax.crypto.spec.GCMParameterSpec;
+import org.json.*;
+public class Store {
+ private static final Object LOCK=new Object(); private static final String ALIAS="ryadom-v1";
+ private static javax.crypto.SecretKey key() throws Exception {KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);if(!ks.containsAlias(ALIAS)){KeyGenerator gen=KeyGenerator.getInstance("AES","AndroidKeyStore");gen.init(new KeyGenParameterSpec.Builder(ALIAS,KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build());return gen.generateKey();}return (javax.crypto.SecretKey)ks.getKey(ALIAS,null);}
+ public static JSONObject read(Context c){synchronized(LOCK){File f=new File(c.getFilesDir(),"calendar.enc");AtomicFile af=new AtomicFile(f);if(!f.exists()&&!new File(f+".bak").exists())return empty();try{byte[] bytes=af.readFully();if(bytes.length<13)throw new IOException();Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,java.util.Arrays.copyOfRange(bytes,0,12)));return new JSONObject(new String(cipher.doFinal(bytes,12,bytes.length-12),java.nio.charset.StandardCharsets.UTF_8));}catch(Exception e){throw new IllegalStateException("Не удалось открыть защищённый кэш. Не удаляйте приложение до проверки.");}}}
+ private static JSONObject empty(){try{return new JSONObject().put("accounts",new JSONArray()).put("events",new JSONArray()).put("statuses",new JSONObject()).put("seen",new JSONObject()).put("reminded",new JSONObject()).put("hidden",new JSONObject());}catch(Exception e){throw new IllegalStateException(e);}}
+ public interface Edit{void run(JSONObject data)throws Exception;}
+ public static void edit(Context c,Edit edit){synchronized(LOCK){JSONObject data=read(c);try{edit.run(data);Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,key());byte[] bytes=cipher.doFinal(data.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));AtomicFile f=new AtomicFile(new File(c.getFilesDir(),"calendar.enc"));FileOutputStream out=f.startWrite();try{out.write(cipher.getIV());out.write(bytes);f.finishWrite(out);}catch(Exception e){f.failWrite(out);throw e;}}catch(Exception e){throw new IllegalStateException("Не удалось сохранить защищённые данные.");}}}
+ public static JSONArray array(JSONObject d,String key){JSONArray a=d.optJSONArray(key);return a==null?new JSONArray():a;}
+ public static JSONObject object(JSONObject d,String key){JSONObject a=d.optJSONObject(key);return a==null?new JSONObject():a;}
+}
