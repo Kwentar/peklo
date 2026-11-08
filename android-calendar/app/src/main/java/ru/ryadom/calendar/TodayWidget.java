@@ -19,7 +19,7 @@ public class TodayWidget extends AppWidgetProvider {
  static void selectDay(Context c,int id,LocalDate day){android.content.SharedPreferences.Editor edit=prefs(c).edit();if(day==null)edit.remove("day-"+id);else edit.putString("day-"+id,day.toString());edit.apply();refresh(c);}
  @Override public void onReceive(Context c,Intent intent){super.onReceive(c,intent);if(NAV.equals(intent.getAction())){int id=intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,-1);AppWidgetProviderInfo info=AppWidgetManager.getInstance(c).getAppWidgetInfo(id);if(info==null||!info.provider.equals(new ComponentName(c,TodayWidget.class)))return;int delta=intent.getIntExtra("delta",0);selectDay(c,id,delta==0?null:selectedDay(c,id).plusDays(delta<0?-1:1));}}
  @Override public void onDeleted(Context c,int[] ids){android.content.SharedPreferences.Editor edit=prefs(c).edit();for(int id:ids)edit.remove("day-"+id);edit.apply();}
- public static void refresh(Context c){AppWidgetManager m=AppWidgetManager.getInstance(c);int[] ids=m.getAppWidgetIds(new ComponentName(c,TodayWidget.class));if(ids.length>0)render(c,m,ids);}
+ public static void refresh(Context c){AppWidgetManager m=AppWidgetManager.getInstance(c);int[] ids=m.getAppWidgetIds(new ComponentName(c,TodayWidget.class));if(ids.length>0){render(c,m,ids);if(Build.VERSION.SDK_INT<31)m.notifyAppWidgetViewDataChanged(ids,R.id.widget_events);}}
  @Override public void onUpdate(Context c,AppWidgetManager m,int[] ids){render(c,m,ids);}
  @Override public void onAppWidgetOptionsChanged(Context c,AppWidgetManager m,int id,Bundle options){render(c,m,new int[]{id});}
  static PendingIntent navigation(Context c,int id,int delta){Intent i=new Intent(c,TodayWidget.class).setAction(NAV).setData(Uri.parse("peklo://widget/"+id+"/step/"+delta)).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,id).putExtra("delta",delta);return PendingIntent.getBroadcast(c,0,i,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);}
@@ -34,16 +34,33 @@ public class TodayWidget extends AppWidgetProvider {
   List<Event> events=new ArrayList<>();for(Event e:Sync.visible(data,false))if(e.on(day))events.add(e);
   Map<String,String> types=new HashMap<>();long last=Long.MAX_VALUE;int errors=0;boolean covered=true;JSONArray accounts=Store.array(data,"accounts");JSONObject statuses=Store.object(data,"statuses");long begin=day.atStartOfDay(Event.ZONE).toInstant().toEpochMilli(),finish=day.plusDays(1).atStartOfDay(Event.ZONE).toInstant().toEpochMilli();
   for(int i=0;i<accounts.length();i++){JSONObject a=accounts.optJSONObject(i);types.put(a.optString("id"),a.optString("type"));JSONObject s=statuses.optJSONObject(a.optString("id"));if(s==null||s.optLong("success")==0||!s.optString("error").isEmpty())errors++;if(s!=null&&s.optLong("success")>0)last=Math.min(last,s.optLong("success"));if(s==null||s.optLong("rangeStart",Long.MAX_VALUE)>begin||s.optLong("rangeEnd",0)<finish)covered=false;}
-  v.setTextViewText(R.id.widget_meta,events.size()+" встреч · Москва UTC+3"+(errors>0?" · есть ошибки":""));v.setTextViewText(R.id.widget_status,(last==Long.MAX_VALUE?"Нет загруженных данных":"Обновлено "+Instant.ofEpochMilli(last).atZone(Event.ZONE).format(DateTimeFormatter.ofPattern("dd.MM HH:mm")))+(!covered?" · неполный кэш":""));v.removeAllViews(R.id.widget_events);
-  if(events.isEmpty()){note(c,v,accounts.length()==0?"Подключите календарь":!covered?"Этот день ещё не загружен":errors>0?"Нет встреч в кэше. Проверьте источники":"Время для себя\nНа этот день встреч нет",open(c,id,day,null,false));return v;}
-  float scale=Math.max(1,c.getResources().getConfiguration().fontScale);WidgetPlan plan=new WidgetPlan(events,day,Math.max(50,height-(int)((compact?120:180)*scale)),scale);int cursor=plan.start;
-  for(WidgetPlan.Group g:plan.groups){if(!compact&&!g.allDay&&g.start>cursor)gap(c,v,cursor,g.start);RemoteViews row=new RemoteViews(c.getPackageName(),R.layout.widget_row);row.setTextViewText(R.id.row_hour,g.allDay?"День":WidgetPlan.time(g.start));row.removeAllViews(R.id.row_cards);
-   if(g.summary){RemoteViews card=new RemoteViews(c.getPackageName(),R.layout.widget_event);card.setTextViewText(R.id.event_time,g.allDay?"Весь день и встречи":WidgetPlan.time(g.start)+"–"+WidgetPlan.time(g.end));card.setTextViewText(R.id.event_title,g.events.size()+" встреч · открыть день");card.setOnClickPendingIntent(R.id.event_root,open(c,id,day,null,false));row.addView(R.id.row_cards,card);}
-   else for(Event e:g.events){boolean shortEvent=!e.allDay&&e.end-e.start<30*60000L;RemoteViews card=new RemoteViews(c.getPackageName(),shortEvent?R.layout.widget_short:R.layout.widget_event);card.setInt(R.id.event_root,"setMinimumHeight",(int)(g.height()*scale*c.getResources().getDisplayMetrics().density));card.setTextViewText(R.id.event_time,(e.allDay?"Весь день":Event.time(e.start)+"–"+Event.time(e.end))+(!shortEvent?" · "+CalendarStyle.name(data,e.source,e.calendar):""));card.setTextViewText(R.id.event_title,e.title);if(g.events.size()>1&&!shortEvent)card.setInt(R.id.event_title,"setMaxLines",2);card.setInt(R.id.event_root,"setBackgroundResource",CalendarStyle.DRAWABLES[CalendarStyle.color(data,e.source,e.calendar)]);card.setContentDescription(R.id.event_root,CalendarStyle.name(data,e.source,e.calendar)+" · "+(e.allDay?"Весь день":Event.time(e.start)+"–"+Event.time(e.end))+" "+e.title);card.setOnClickPendingIntent(R.id.event_root,open(c,id,day,e.key(),false));row.addView(R.id.row_cards,card);}
-   v.addView(R.id.widget_events,row);if(!g.allDay)cursor=g.end;
+  v.setTextViewText(R.id.widget_meta,events.size()+" встреч · Москва UTC+3"+(errors>0?" · есть ошибки":""));v.setTextViewText(R.id.widget_status,(last==Long.MAX_VALUE?"Нет загруженных данных":"Обновлено "+Instant.ofEpochMilli(last).atZone(Event.ZONE).format(DateTimeFormatter.ofPattern("dd.MM HH:mm")))+(!covered?" · неполный кэш":""));
+  if(Build.VERSION.SDK_INT>=31){
+   RemoteViews.RemoteCollectionItems.Builder items=new RemoteViews.RemoteCollectionItems.Builder().setHasStableIds(false).setViewTypeCount(3);
+   List<RemoteViews> rows=rows(c,day,data);for(int i=0;i<rows.size();i++)items.addItem(i,rows.get(i));v.setRemoteAdapter(R.id.widget_events,items.build());
+  }else{
+   Intent adapter=new Intent(c,WidgetListService.class).putExtra("day",day.toString()).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID,id).setData(Uri.parse("peklo://widget-list/"+id+"/"+day));v.setRemoteAdapter(R.id.widget_events,adapter);
   }
-  if(!compact){if(cursor<plan.end)gap(c,v,cursor,plan.end);note(c,v,WidgetPlan.time(plan.end),null);}return v;
+  Intent click=new Intent(c,MainActivity.class).setData(Uri.parse("peklo://widget-click/"+id+"/"+day)).putExtra("day",day.toString());
+  v.setPendingIntentTemplate(R.id.widget_events,PendingIntent.getActivity(c,0,click,PendingIntent.FLAG_UPDATE_CURRENT|(Build.VERSION.SDK_INT>=31?PendingIntent.FLAG_MUTABLE:0)));
+  return v;
  }
- static void gap(Context c,RemoteViews v,int from,int to){RemoteViews gap=new RemoteViews(c.getPackageName(),R.layout.widget_gap);int delta=to-from;String duration=delta>=60?delta/60+" ч"+(delta%60>0?" "+delta%60+" мин":""):delta+" мин";gap.setTextViewText(R.id.gap_text,(delta>=60?"≈ ":"")+WidgetPlan.time(from)+"–"+WidgetPlan.time(to)+" · "+duration+" свободно");v.addView(R.id.widget_events,gap);}
- static void note(Context c,RemoteViews v,String text,PendingIntent action){RemoteViews note=new RemoteViews(c.getPackageName(),R.layout.widget_note);note.setTextViewText(R.id.note_text,text);if(action!=null)note.setOnClickPendingIntent(R.id.note_text,action);v.addView(R.id.widget_events,note);}
+ static List<RemoteViews> rows(Context c,LocalDate day,JSONObject data){
+  List<RemoteViews> rows=new ArrayList<>();List<Event> events=new ArrayList<>();for(Event e:Sync.visible(data,false))if(e.on(day))events.add(e);
+  if(events.isEmpty()){RemoteViews note=new RemoteViews(c.getPackageName(),R.layout.widget_note);note.setTextViewText(R.id.note_text,Store.array(data,"accounts").length()==0?"Подключите календарь":"В кэше этого дня нет встреч");note.setOnClickFillInIntent(R.id.note_text,new Intent().putExtra("day",day.toString()));rows.add(note);return rows;}
+  float scale=Math.max(1,c.getResources().getConfiguration().fontScale);WidgetPlan plan=new WidgetPlan(events,day,Integer.MAX_VALUE,scale);int cursor=plan.start;
+  for(WidgetPlan.Group g:plan.groups){
+   if(!g.allDay&&g.start>cursor)rows.add(gap(c,cursor,g.start));
+   Event e=g.events.get(0);RemoteViews row=new RemoteViews(c.getPackageName(),R.layout.widget_row);row.setTextViewText(R.id.row_hour,g.allDay?"День":WidgetPlan.time(g.start));
+   boolean shortEvent=!e.allDay&&e.end-e.start<30*60000L;RemoteViews card=new RemoteViews(c.getPackageName(),shortEvent?R.layout.widget_short:R.layout.widget_event);
+   card.setInt(R.id.event_root,"setMinimumHeight",(int)(g.height()*scale*c.getResources().getDisplayMetrics().density));
+   card.setTextViewText(R.id.event_time,(e.allDay?"Весь день":Event.time(e.start)+"–"+Event.time(e.end))+(!shortEvent?" · "+CalendarStyle.name(data,e.source,e.calendar):""));card.setTextViewText(R.id.event_title,e.title);
+   card.setInt(R.id.event_root,"setBackgroundResource",CalendarStyle.DRAWABLES[CalendarStyle.color(data,e.source,e.calendar)]);
+   card.setContentDescription(R.id.event_root,CalendarStyle.name(data,e.source,e.calendar)+" · "+(e.allDay?"Весь день":Event.time(e.start)+"–"+Event.time(e.end))+" "+e.title);
+   row.removeAllViews(R.id.row_cards);row.addView(R.id.row_cards,card);row.setOnClickFillInIntent(R.id.row_root,new Intent().putExtra("day",day.toString()).putExtra("event",e.key()));rows.add(row);
+   if(!g.allDay)cursor=Math.max(cursor,g.end);
+  }
+  if(cursor<plan.end)rows.add(gap(c,cursor,plan.end));return rows;
+ }
+ static RemoteViews gap(Context c,int from,int to){RemoteViews gap=new RemoteViews(c.getPackageName(),R.layout.widget_gap);int delta=to-from;String duration=delta>=60?delta/60+" ч"+(delta%60>0?" "+delta%60+" мин":""):delta+" мин";gap.setTextViewText(R.id.gap_text,WidgetPlan.time(from)+"–"+WidgetPlan.time(to)+" · "+duration+" свободно");return gap;}
 }

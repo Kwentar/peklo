@@ -36,10 +36,12 @@ public class UiTest {
     void assertFits(View root){
         ViewGroup list=root.findViewById(R.id.widget_events);
         assertNotNull(list);
-        for(int i=0;i<list.getChildCount();i++)assertTrue("Widget row clipped at bottom",list.getChildAt(i).getBottom()<=list.getHeight());
+        assertTrue(list instanceof ListView);
+        assertTrue(((ListView)list).getCount()>0);
         checkTitles(root);
     }
     void checkTitles(View view){
+        if(view.getId()==R.id.row_cards)assertEquals("One card per row, including recycled rows",1,((ViewGroup)view).getChildCount());
         if(view instanceof TextView&&view.getId()==R.id.event_title){TextView t=(TextView)view;assertNotNull(t.getLayout());assertTrue("Title clipped vertically",t.getLayout().getHeight()<=t.getHeight()-t.getPaddingTop()-t.getPaddingBottom());}
         if(view instanceof ViewGroup)for(int i=0;i<((ViewGroup)view).getChildCount();i++)checkTitles(((ViewGroup)view).getChildAt(i));
     }
@@ -81,10 +83,10 @@ public class UiTest {
             ins.runOnMainSync(()->{a.handler.removeCallbacks(a.ticking);host.startListening();view[0]=host.createView(a,id,manager.getAppWidgetInfo(id));a.setContentView(view[0]);TodayWidget.refresh(c);});
             screenshot(ins,"widget-full");
             ins.runOnMainSync(()->assertFits(view[0]));
-            ins.runOnMainSync(()->{a.handler.removeCallbacks(a.ticking);RemoteViews small=TodayWidget.build(c,id,day,Store.read(c),260);FrameLayout container=new FrameLayout(a);View content=small.apply(a,container);container.addView(content,new FrameLayout.LayoutParams(a.dp(280),a.dp(260)));a.setContentView(container);});
+            ins.runOnMainSync(()->{a.handler.removeCallbacks(a.ticking);RemoteViews small=TodayWidget.build(c,id,day,Store.read(c),260);FrameLayout container=new FrameLayout(a);((ViewGroup)view[0].getParent()).removeView(view[0]);container.addView(view[0],new FrameLayout.LayoutParams(a.dp(280),a.dp(260)));a.setContentView(container);manager.updateAppWidget(id,small);});
             screenshot(ins,"widget-small");
-            ins.runOnMainSync(()->assertFits(a.getWindow().getDecorView()));
-            ins.runOnMainSync(()->a.setContentView(view[0]));ins.waitForIdleSync();
+            ins.runOnMainSync(()->assertFits(view[0]));
+            ins.runOnMainSync(()->{((ViewGroup)view[0].getParent()).removeView(view[0]);a.setContentView(view[0]);TodayWidget.refresh(c);});ins.waitForIdleSync();
             ins.runOnMainSync(()->{assertNotNull(view[0].findViewById(R.id.widget_title));assertEquals(day,TodayWidget.selectedDay(c,id));view[0].findViewById(R.id.widget_next).performClick();});
             ins.waitForIdleSync();Thread.sleep(400);
             assertEquals(day.plusDays(1),TodayWidget.selectedDay(c,id));screenshot(ins,"widget-next-day");
