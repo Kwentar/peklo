@@ -1,0 +1,13 @@
+package ru.ryadom.calendar;
+import android.app.*;import android.content.*;import android.os.*;import android.view.*;import android.widget.*;import androidx.test.ext.junit.runners.AndroidJUnit4;import androidx.test.platform.app.InstrumentationRegistry;import org.junit.Test;import org.junit.runner.RunWith;import org.json.*;import java.time.*;import java.util.*;import static org.junit.Assert.*;
+@RunWith(AndroidJUnit4.class)
+public class OverlapWidgetTest {
+ @Test public void nestedCardsKeepRequestedGeometry() throws Exception {
+  assertTrue(Build.HARDWARE.equals("ranchu")||Build.HARDWARE.equals("goldfish"));Instrumentation ins=InstrumentationRegistry.getInstrumentation();Context c=ins.getTargetContext();LocalDate day=LocalDate.now(Event.ZONE);long midnight=day.atStartOfDay(Event.ZONE).toInstant().toEpochMilli();List<Event> events=new ArrayList<>();int[][] times={{720,780},{660,840},{660,900}};
+  for(int i=0;i<times.length;i++){Event e=new Event();e.id="overlap-"+i;e.source="fixture";e.calendar="main";e.title="Встреча "+(i+1);e.start=midnight+times[i][0]*60000L;e.end=midnight+times[i][1]*60000L;events.add(e);}
+  Store.edit(c,d->{d.put("accounts",new JSONArray());d.put("events",new JSONArray());});MainActivity a=(MainActivity)ins.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));View[] row={null};
+  try {ins.runOnMainSync(()->{a.handler.removeCallbacks(a.ticking);WidgetPlan plan=new WidgetPlan(events,day,1000,1);RemoteViews remote=TodayWidget.overlapRow(c,day,new JSONObject(),plan.groups.get(0),new OverlapPlan(events),1);LinearLayout container=new LinearLayout(a);container.setPadding(a.dp(16),a.dp(48),a.dp(16),0);container.setBackgroundColor(0xfffaf8f4);row[0]=remote.apply(a,container);container.addView(row[0],new LinearLayout.LayoutParams(-1,-2));a.setContentView(container);});ins.waitForIdleSync();
+   ins.runOnMainSync(()->{LinearLayout columns=row[0].findViewById(R.id.row_cards);assertEquals(3,columns.getChildCount());int unit=a.dp(54);for(int lane=0;lane<3;lane++){LinearLayout col=(LinearLayout)columns.getChildAt(lane);TextView card=col.findViewById(R.id.overlap_card);assertNotNull(card);int which=card.getText().toString().endsWith("1")?0:card.getText().toString().endsWith("2")?1:2;assertEquals(which==0?unit/2:0,card.getTop(),1);assertEquals(unit*(which==0?1:which==1?2:2.5f),card.getHeight(),1);assertTrue(card.getLayout().getLineCount()>=2);assertFalse(card.getText().toString().contains("открыть день"));}});new UiTest().screenshot(ins,"widget-overlap-nested");
+  } finally {ins.runOnMainSync(a::finish);}
+ }
+}

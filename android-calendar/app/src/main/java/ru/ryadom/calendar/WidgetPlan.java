@@ -3,7 +3,7 @@ package ru.ryadom.calendar;
 import java.time.LocalDate;
 import java.util.*;
 
-/** Every event is a separate row; overflow is handled by the widget list. */
+/** Every event keeps its own card; overlapping cards share a row. */
 public final class WidgetPlan {
  public static final class Group {
   public final List<Event> events=new ArrayList<>();
@@ -19,7 +19,8 @@ public final class WidgetPlan {
   List<Event> events=new ArrayList<>(input);events.sort(Comparator.comparing((Event e)->!e.allDay).thenComparingLong(e->e.start));
   for(Event e:events){int from=(int)Math.max(0,(e.start-midnight)/60000),to=(int)Math.min(1440,Math.max(from+1,(e.end-midnight)/60000));
    if(!e.allDay){start=Math.min(start,from);end=Math.max(end,to);}
-   groups.add(new Group(e,from,to));
+   Group last=groups.isEmpty()?null:groups.get(groups.size()-1);
+   if(!e.allDay&&last!=null&&!last.allDay&&from<last.end){last.events.add(e);last.end=Math.max(last.end,to);}else groups.add(new Group(e,from,to));
   }
  }
  public int cost(float scale){int cost=22,cursor=start;for(Group g:groups){if(!g.allDay&&g.start>cursor)cost+=24;cost+=g.height()+4;if(!g.allDay)cursor=g.end;}if(cursor<end)cost+=24;return (int)Math.ceil(cost*scale);}

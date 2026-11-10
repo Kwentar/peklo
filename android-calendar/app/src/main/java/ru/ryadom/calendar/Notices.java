@@ -18,11 +18,12 @@ public class Notices {
   return "";
  }
  static void record(Context c,String message){Store.edit(c,d->d.put("notificationStatus",message).put("notificationChecked",System.currentTimeMillis()));}
+ static android.graphics.Bitmap calendarIcon(Context c){int size=128;android.graphics.Bitmap image=android.graphics.Bitmap.createBitmap(size,size,android.graphics.Bitmap.Config.ARGB_8888);android.graphics.Canvas canvas=new android.graphics.Canvas(image);android.graphics.Paint paint=new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);paint.setColor(0xff276a4f);canvas.drawRoundRect(0,0,size,size,26,26,paint);android.graphics.drawable.Drawable icon=c.getDrawable(R.drawable.ic_calendar);icon.setBounds(22,22,106,106);icon.draw(canvas);return image;}
  static boolean show(Context c,String channel,int id,String title,String text,LocalDate day,String eventKey){
   channels(c);String blocked=blockedReason(c,channel);if(!blocked.isEmpty()){record(c,blocked);return false;}
   Intent intent=new Intent(c,MainActivity.class).setAction("OPEN_DAY").setData(Uri.parse("ryadom://open/"+channel+"/"+id)).putExtra("day",day.toString()).putExtra("event",eventKey).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
   PendingIntent open=PendingIntent.getActivity(c,id,intent,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
-  Notification.Builder n=new Notification.Builder(c,channel).setSmallIcon(ru.ryadom.calendar.R.drawable.ic_calendar).setContentTitle(title).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).setCategory(Notification.CATEGORY_EVENT).setVisibility(Notification.VISIBILITY_PRIVATE).setShowWhen(true);
+  Notification.Builder n=new Notification.Builder(c,channel).setSmallIcon(ru.ryadom.calendar.R.drawable.ic_calendar).setLargeIcon(calendarIcon(c)).setColor(0xff276a4f).setContentTitle(title).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).setCategory(Notification.CATEGORY_EVENT).setVisibility(Notification.VISIBILITY_PRIVATE).setShowWhen(true);
   try{manager(c).notify(channel,id,n.build());record(c,"Передано Android: "+title);return true;}catch(SecurityException e){record(c,"Android отклонил уведомление: проверь разрешения");return false;}
  }
  public static void newEvents(Context c,JSONObject account,List<Event> events){

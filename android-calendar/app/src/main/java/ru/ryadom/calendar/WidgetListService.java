@@ -11,12 +11,12 @@ public class WidgetListService extends RemoteViewsService {
   return new RemoteViewsFactory(){
    List<RemoteViews> rows=Collections.emptyList();
    public void onCreate(){onDataSetChanged();}
-   public void onDataSetChanged(){rows=TodayWidget.rows(WidgetListService.this,day,Store.read(WidgetListService.this));}
+   public void onDataSetChanged(){rows=TodayWidget.rows(WidgetListService.this,day,Store.read(WidgetListService.this),intent.getIntExtra("available",0));}
    public void onDestroy(){}
    public int getCount(){return rows.size();}
    public RemoteViews getViewAt(int position){return position>=0&&position<rows.size()?rows.get(position):null;}
    public RemoteViews getLoadingView(){return null;}
-   public int getViewTypeCount(){return 3;}
+   public int getViewTypeCount(){return 4;}
    public long getItemId(int position){return position;}
    public boolean hasStableIds(){return false;}
   };
