@@ -1,0 +1,13 @@
+package ru.ryadom.calendar;
+import android.content.Context;import android.os.Build;import androidx.test.platform.app.InstrumentationRegistry;import org.json.*;import org.junit.Test;import java.time.*;import static org.junit.Assert.*;
+public class RefreshRangeTest {
+ @Test public void selectedDayWindowPreservesOtherDatesAndDeduplicatesMoves()throws Exception{
+  assertTrue(Build.HARDWARE.equals("ranchu")||Build.HARDWARE.equals("goldfish"));Context c=InstrumentationRegistry.getInstrumentation().getTargetContext();while(Sync.busy.get())Thread.sleep(50);LocalDate today=LocalDate.now(Event.ZONE),selected=today.minusDays(60);JSONObject account=new JSONObject().put("id","range-fixture").put("type","device").put("active",true);Store.edit(c,d->{d.put("accounts",new JSONArray().put(account)).put("events",new JSONArray()).put("statuses",new JSONObject()).put("mirrorLinks",new JSONObject()).put("calendarRoles",new JSONObject()).put("hidden",new JSONObject()).put("systemExport",false);for(String key:new String[]{"newEvents","moves","cancellations","reminders","summary"})d.put(key,false);});
+  Event past=event("past",selected),future=event("future",today.plusDays(1));try{
+   Sync.requestedDay.set(selected);Sync.run(c,(ctx,a,from,to)->{assertEquals(selected.minusDays(14).atStartOfDay(Event.ZONE).toInstant().toEpochMilli(),from);assertEquals(selected.plusDays(31).atStartOfDay(Event.ZONE).toInstant().toEpochMilli(),to);Providers.Result r=new Providers.Result();r.events.add(past);return r;},(ctx,a,e)->false);assertEquals(1,Sync.visible(Store.read(c),false).size());
+   Sync.run(c,(ctx,a,from,to)->{assertEquals(today.minusDays(14).atStartOfDay(Event.ZONE).toInstant().toEpochMilli(),from);Providers.Result r=new Providers.Result();r.events.add(future);return r;},(ctx,a,e)->false);assertEquals(2,Sync.visible(Store.read(c),false).size());
+   Event moved=event("future",selected.plusDays(1));Sync.requestedDay.set(selected);Sync.run(c,(ctx,a,from,to)->{Providers.Result r=new Providers.Result();r.events.add(past);r.events.add(moved);return r;},(ctx,a,e)->false);assertEquals(2,Sync.visible(Store.read(c),false).size());assertTrue(Sync.visible(Store.read(c),false).stream().anyMatch(e->e.id.equals("future")&&e.start==moved.start));
+  }finally{Sync.requestedDay.set(null);Store.edit(c,d->{d.put("accounts",new JSONArray()).put("events",new JSONArray());for(String key:new String[]{"newEvents","moves","cancellations","reminders","summary"})d.put(key,true);});}
+ }
+ static Event event(String id,LocalDate day){Event e=new Event();e.id=id;e.stableId=id;e.source="range-fixture";e.calendar="fixture";e.title="Range fixture";e.start=day.atTime(12,0).atZone(Event.ZONE).toInstant().toEpochMilli();e.end=e.start+3600000;return e;}
+}

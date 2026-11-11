@@ -2,13 +2,15 @@ package ru.ryadom.calendar;
 import android.content.*;import org.json.*;import java.time.*;import java.util.*;import java.util.concurrent.atomic.AtomicBoolean;
 public class Sync {
  public static final AtomicBoolean busy=new AtomicBoolean(false);
+ static final java.util.concurrent.atomic.AtomicReference<LocalDate> requestedDay=new java.util.concurrent.atomic.AtomicReference<>();
+ public static void async(Context c,LocalDate day){requestedDay.set(day);async(c);}
  public static final String UPDATED="ru.ryadom.calendar.UPDATED";
  public static void async(Context c){new Thread(()->run(c.getApplicationContext()),"calendar-sync").start();}
  interface Loader{Providers.Result load(Context c,JSONObject account,long from,long to)throws Exception;}
  interface DeletionChecker{boolean deleted(Context c,JSONObject account,Event event)throws Exception;}
  public static void run(Context c){run(c,Providers::load,Providers::deleted);}
  static void run(Context c,Loader loader,DeletionChecker checker){if(!busy.compareAndSet(false,true))return;try{
-  JSONObject initial=Store.read(c);JSONArray accounts=Store.array(initial,"accounts");LocalDate today=LocalDate.now(Event.ZONE);long from=today.minusDays(7).atStartOfDay(Event.ZONE).toInstant().toEpochMilli(),to=today.plusDays(31).atStartOfDay(Event.ZONE).toInstant().toEpochMilli();
+  JSONObject initial=Store.read(c);JSONArray accounts=Store.array(initial,"accounts");LocalDate requested=requestedDay.getAndSet(null);LocalDate today=requested==null?LocalDate.now(Event.ZONE):requested;long from=today.minusDays(14).atStartOfDay(Event.ZONE).toInstant().toEpochMilli(),to=today.plusDays(31).atStartOfDay(Event.ZONE).toInstant().toEpochMilli();
   for(int i=0;i<accounts.length();i++){JSONObject account=accounts.getJSONObject(i);String id=account.getString("id");if(!account.optBoolean("active",true))continue;
    try{Providers.Result result=loader.load(c,account,from,to);List<Event> additions=new ArrayList<>();
     Store.edit(c,data->{boolean exists=false;for(int j=0;j<Store.array(data,"accounts").length();j++)if(Store.array(data,"accounts").getJSONObject(j).getString("id").equals(id))exists=true;if(!exists)return;
@@ -17,7 +19,8 @@ public class Sync {
      JSONObject moves=Store.object(data,"pendingMoves"),cancellations=Store.object(data,"pendingCancellations"),checks=Store.object(data,"deletionChecks");
      Map<String,Event> candidates=new LinkedHashMap<>();for(Event e:previous)candidates.put(e.key(),e);Iterator<String> checkKeys=checks.keys();List<String> sourceKeys=new ArrayList<>();while(checkKeys.hasNext()){String key=checkKeys.next();Event e=Event.from(checks.getJSONObject(key));if(id.equals(e.source)){candidates.putIfAbsent(key,e);sourceKeys.add(key);}}for(String key:sourceKeys)checks.remove(key);
      if(!first&&data.optBoolean("cancellations",true))for(Event e:Cancellations.missing(new ArrayList<>(candidates.values()),result.events,account.optString("type"),from,to,System.currentTimeMillis(),result.calendars.keySet()))if(!Store.object(data,"hidden").optBoolean(id+"|"+e.calendar))checks.put(e.key(),e.json());data.put("deletionChecks",checks);
-     JSONObject seen=Store.object(data,"seen"),hidden=Store.object(data,"hidden");long now=System.currentTimeMillis();JSONArray merged=new JSONArray();for(int j=0;j<Store.array(data,"events").length();j++){JSONObject e=Store.array(data,"events").getJSONObject(j);if(!e.optString("source").equals(id))merged.put(e);}
+     Set<String> loadedIds=new HashSet<>(),loadedStable=new HashSet<>();for(Event loaded:result.events){loadedIds.add(loaded.id);if(!loaded.stableId.isEmpty())loadedStable.add(loaded.stableId);}
+     JSONObject seen=Store.object(data,"seen"),hidden=Store.object(data,"hidden");long now=System.currentTimeMillis();JSONArray merged=new JSONArray();for(int j=0;j<Store.array(data,"events").length();j++){JSONObject e=Store.array(data,"events").getJSONObject(j);if(!e.optString("source").equals(id)||((e.optLong("start")>=to||e.optLong("end")<=from&&e.optLong("start")<from)&&!loadedIds.contains(e.optString("id"))&&!loadedStable.contains(e.optString("stableId"))))merged.put(e);}
      for(Event e:result.events){if(Mirror.isCopy(data,e)&&e.copyToken.isEmpty())e.copyToken="copy-known";Event before=Moves.previous(e,previous,result.events,account.optString("type"));boolean moved=before!=null&&Moves.changed(before,e);if(!first&&data.optBoolean("cancellations",true)&&Cancellations.newlyCancelled(before,e,account.optString("type"),now)&&!hidden.optBoolean(id+"|"+e.calendar))cancellations.put(before.key(),before.json());if(!first&&moved&&data.optBoolean("moves",true)&&e.end>now&&!e.isCancelled(account.optString("type"))&&!hidden.optBoolean(id+"|"+e.calendar)){JSONObject queued=moves.optJSONObject(before.key());if(!before.key().equals(e.key()))moves.remove(before.key());moves.put(e.key(),new JSONObject().put("before",queued==null?before.json():queued.getJSONObject("before")).put("after",e.json()));}if(!first&&!moved&&!seen.has(e.key())&&e.start<previousEnd&&e.end>now&&!e.isCancelled(account.optString("type"))&&!hidden.optBoolean(id+"|"+e.calendar))additions.add(e);seen.put(e.key(),now);merged.put(e.json());}
      Iterator<String> keys=seen.keys();List<String> expired=new ArrayList<>();while(keys.hasNext()){String key=keys.next();if(seen.optLong(key)<now-90*86400000L)expired.add(key);}for(String key:expired)seen.remove(key);
      JSONObject calendars=new JSONObject();for(Map.Entry<String,String> cal:result.calendars.entrySet())calendars.put(cal.getKey(),cal.getValue());
@@ -39,7 +42,7 @@ public class Sync {
   Notices.flushMoves(c);
   Notices.flushNew(c);
   Notices.schedule(c);
- }catch(Exception ignored){}finally{busy.set(false);try{TodayWidget.refresh(c);}catch(Exception ignored){}c.sendBroadcast(new Intent(UPDATED).setPackage(c.getPackageName()));}}
+ }catch(Exception ignored){}finally{busy.set(false);try{TodayWidget.refresh(c);}catch(Exception ignored){}c.sendBroadcast(new Intent(UPDATED).setPackage(c.getPackageName()));if(requestedDay.get()!=null)async(c);}}
  static void checkDeletions(Context c,JSONObject account,DeletionChecker checker){
   String source=account.optString("id");JSONObject queue=Store.object(Store.read(c),"deletionChecks");Iterator<String> keys=queue.keys();int attempted=0;String warning="";
   while(keys.hasNext()){String key=keys.next();Event event=Event.from(queue.optJSONObject(key));if(!source.equals(event.source))continue;if(attempted++>=3){warning="Часть удалений ещё проверяется; расписание обновлено.";break;}
