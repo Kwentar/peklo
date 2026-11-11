@@ -5,15 +5,16 @@ from icalendar import Calendar
 import recurring_ical_events
 TZ=ZoneInfo("Europe/Moscow")
 
-def parse_events(raw, day=None, end_day=None):
+def parse_events(raw, day=None, end_day=None, include_cancelled=False):
     cal = Calendar.from_ical(raw)
     if cal.name != 'VCALENDAR': raise ValueError('not calendar')
     day = day or datetime.now(TZ).date()
     start = datetime.combine(day, dt_time.min, TZ)
     end = datetime.combine(end_day,dt_time.min,TZ) if end_day else start + timedelta(days=1)
     result = []
+    recurring_uids={str(e.get('UID','')) for e in cal.walk('VEVENT') if any(k in e for k in ('RRULE','RDATE','RECURRENCE-ID'))}
     for ev in recurring_ical_events.of(cal).between(start, end):
-        if str(ev.get('STATUS', '')).upper() == 'CANCELLED': continue
+        if str(ev.get('STATUS', '')).upper() == 'CANCELLED' and not include_cancelled: continue
         begin = ev.decoded('DTSTART')
         finish = ev.decoded('DTEND', None)
         all_day = not isinstance(begin, datetime)
@@ -23,7 +24,9 @@ def parse_events(raw, day=None, end_day=None):
         b = aware(begin)
         f = aware(finish) if finish is not None else b + ev.decoded('DURATION', timedelta(days=1) if all_day else timedelta())
         if b >= end or (f <= start and b < start): continue
-        result.append(dict(id=str(ev.get('UID', ''))+'|'+str(ev.get('RECURRENCE-ID', begin)), title=str(ev.get('SUMMARY', 'Без названия')), start=b.isoformat(), end=f.isoformat(), allDay=all_day, location=str(ev.get('LOCATION', ''))))
+        reminders=[int(-a.decoded('TRIGGER').total_seconds()/60) for a in ev.subcomponents if a.name=='VALARM' and isinstance(a.decoded('TRIGGER',None),timedelta) and a.decoded('TRIGGER')<=timedelta()]
+        uid=str(ev.get('UID',''));token=str(ev.get('X-PEKLO-TOKEN',''))
+        result.append(dict(uid=uid,stableId=uid+('|' + str(ev.get('RECURRENCE-ID',begin)) if uid in recurring_uids else ''),recurring=uid in recurring_uids,description=str(ev.get('DESCRIPTION','')),reminderMinutes=min(reminders) if reminders else -1,writeToken=token,copyToken=token if token.startswith('copy-') else '',cancelled=str(ev.get('STATUS','')).upper()=='CANCELLED',id=str(ev.get('UID', ''))+'|'+str(ev.get('RECURRENCE-ID', begin)), title=str(ev.get('SUMMARY', 'Без названия')), start=b.isoformat(), end=f.isoformat(), allDay=all_day, location=str(ev.get('LOCATION', ''))))
     return sorted(result, key=lambda x:x['start'])
 
 def fetch_calendar(url):

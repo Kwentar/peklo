@@ -1,4 +1,4 @@
-"""Read-only EWS CalendarView client. No discovery, redirects, or disk credentials."""
+"""EWS CalendarView reader (explicit writes are in writes.py). No discovery, redirects, or disk credentials."""
 import re
 from urllib.parse import urlsplit, urlunsplit
 import xml.etree.ElementTree as ET
@@ -33,17 +33,17 @@ class EWSError(Exception):
 def request_body(day=None, end_day=None):
     start=datetime.combine(day or datetime.now(TZ).date(),time.min,TZ)
     end=datetime.combine(end_day,time.min,TZ) if end_day else start+timedelta(days=1)
-    fields=''.join(f'<t:FieldURI FieldURI="{field}"/>' for field in ['item:Subject','calendar:Start','calendar:End','calendar:IsAllDayEvent','calendar:IsCancelled','calendar:Location'])
+    fields=''.join(f'<t:FieldURI FieldURI="{field}"/>' for field in ['item:Subject','calendar:Start','calendar:End','calendar:IsAllDayEvent','calendar:IsCancelled','calendar:Location','calendar:CalendarItemType','item:ReminderIsSet','item:ReminderMinutesBeforeStart'])
     return f'''<?xml version="1.0" encoding="utf-8"?>
 <s:Envelope xmlns:s="{NS['s']}" xmlns:m="{NS['m']}" xmlns:t="{NS['t']}">
 <s:Header><t:RequestServerVersion Version="Exchange2010_SP2"/></s:Header>
 <s:Body><m:FindItem Traversal="Shallow">
-<m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{fields}</t:AdditionalProperties></m:ItemShape>
+<m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{fields}<t:ExtendedFieldURI DistinguishedPropertySetId="PublicStrings" PropertyName="PekloToken" PropertyType="String"/></t:AdditionalProperties></m:ItemShape>
 <m:CalendarView MaxEntriesReturned="1000" StartDate="{start.isoformat()}" EndDate="{end.isoformat()}"/>
 <m:ParentFolderIds><t:DistinguishedFolderId Id="calendar"/></m:ParentFolderIds>
 </m:FindItem></s:Body></s:Envelope>'''.encode()
 
-def parse_response(raw):
+def parse_response(raw,include_cancelled=False):
     if b'<!DOCTYPE' in raw.upper() or b'<!ENTITY' in raw.upper():
         raise EWSError('EWS вернул неподдерживаемый XML.')
     try: root=ET.fromstring(raw)
@@ -64,17 +64,11 @@ def parse_response(raw):
     events=[]
     for item in root.findall('.//t:CalendarItem',NS):
         def value(key,default=''):return item.findtext('t:'+key,default=default,namespaces=NS)
-        if value('IsCancelled').lower()=='true': continue
-        try:
-            begin=datetime.fromisoformat(value('Start').replace('Z','+00:00'))
-            end=datetime.fromisoformat(value('End').replace('Z','+00:00'))
-            if begin.tzinfo is None or end.tzinfo is None: raise ValueError()
-            item_id=item.find('t:ItemId',NS).attrib['Id']
-        except (ValueError,AttributeError,KeyError):raise EWSError('EWS вернул событие без корректного времени или ID.')
-        events.append(dict(id=item_id,title=value('Subject','Без названия'),start=begin.astimezone(TZ).isoformat(),end=end.astimezone(TZ).isoformat(),allDay=value('IsAllDayEvent').lower()=='true',location=value('Location')))
+        if value('IsCancelled').lower()=='true' and not include_cancelled: continue
+        events.append(parse_item(item))
     return sorted(events,key=lambda x:(x['start'],x['id']))
 
-def fetch_events(login,password,day=None,end_day=None,*,endpoint):
+def fetch_events(login,password,day=None,end_day=None,*,endpoint,include_cancelled=False):
     endpoint = normalize_endpoint(endpoint)
     # Explicit auth is sent only to the configured HTTPS endpoint. Never follow SSO redirects.
     with requests.post(endpoint,data=request_body(day,end_day),auth=(login,password),headers={'Content-Type':'text/xml; charset=utf-8','SOAPAction':'"http://schemas.microsoft.com/exchange/services/2006/messages/FindItem"','User-Agent':'LocalCalendarMonitor/1.0'},allow_redirects=False,timeout=(10,25),stream=True) as response:
@@ -88,4 +82,18 @@ def fetch_events(login,password,day=None,end_day=None,*,endpoint):
             size+=len(chunk)
             if size>10*1024*1024:raise EWSError('Ответ EWS превышает 10 МБ.')
             chunks.append(chunk)
-    return parse_response(b''.join(chunks))
+    return parse_response(b''.join(chunks),include_cancelled)
+
+
+def parse_item(item):
+    def value(key,default=''):return item.findtext('t:'+key,default=default,namespaces=NS)
+    try:
+        begin=datetime.fromisoformat(value('Start').replace('Z','+00:00'));end=datetime.fromisoformat(value('End').replace('Z','+00:00'))
+        if begin.tzinfo is None or end.tzinfo is None:raise ValueError()
+        identity=item.find('t:ItemId',NS);item_id=identity.attrib['Id']
+    except (ValueError,AttributeError,KeyError):raise EWSError('EWS вернул событие без корректного времени или ID.')
+    token=''
+    for prop in item.findall('t:ExtendedProperty',NS):
+        field=prop.find('t:ExtendedFieldURI',NS)
+        if field is not None and field.get('PropertyName')=='PekloToken':token=prop.findtext('t:Value',default='',namespaces=NS)
+    return dict(id=item_id,remoteId=item_id,stableId='ews|'+item_id,etag=identity.get('ChangeKey',''),title=value('Subject','Без названия'),start=begin.astimezone(TZ).isoformat(),end=end.astimezone(TZ).isoformat(),allDay=value('IsAllDayEvent').lower()=='true',location=value('Location'),description=value('Body'),cancelled=value('IsCancelled').lower()=='true',recurring=value('CalendarItemType','Single')!='Single',reminderMinutes=int(value('ReminderMinutesBeforeStart','15')) if value('ReminderIsSet','true').lower()=='true' else -1,writeToken=token,copyToken=token if token.startswith('copy-') else '')

@@ -16,9 +16,9 @@ class ConnectionTests(unittest.TestCase):
         app.credentials.clear()
     def tearDown(self):
         self.server.shutdown();self.server.server_close();self.thread.join();self.port_patch.stop();self.vault_patch.stop();app.credentials.clear()
-    def post(self,body,token=None):
+    def post(self,body,token=None,path="/api/connect-ews"):
         c=http.client.HTTPConnection('127.0.0.1',self.port)
-        c.request('POST','/api/connect-ews',json.dumps(body),{'X-App-Token':app.TOKEN if token is None else token,'Content-Type':'application/json'})
+        c.request('POST',path,json.dumps(body),{'X-App-Token':app.TOKEN if token is None else token,'Content-Type':'application/json'})
         r=c.getresponse();status=r.status;r.read();c.close();return status
     def test_requires_server_and_rejects_insecure_before_poll(self):
         for endpoint in [None,'http://mail.example.org','https://user:password@mail.example.org']:
@@ -33,3 +33,14 @@ class ConnectionTests(unittest.TestCase):
     def test_requires_app_token(self):
         self.assertEqual(self.post({'login':'test-user','password':'test-password','endpoint':'https://mail.example.org'},token='invalid'),403)
         self.assertNotIn('ews',app.credentials)
+
+    def test_write_endpoints_require_token(self):
+        with patch('app.event_action') as action:
+            for path in ('/api/event-detail','/api/event-save','/api/event-delete','/api/settings'):
+                self.assertEqual(self.post({},token='invalid',path=path),403)
+            action.assert_not_called()
+    def test_write_error_is_safe(self):
+        with patch('app.event_action',side_effect=ValueError('Conflict')):
+            self.assertEqual(self.post({},path='/api/event-save'),400)
+        with patch('app.event_action',side_effect=RuntimeError('private transport details')):
+            self.assertEqual(self.post({},path='/api/event-save'),503)

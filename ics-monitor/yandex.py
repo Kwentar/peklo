@@ -1,4 +1,4 @@
-"""Read-only CalDAV discovery and calendar-query for Yandex."""
+"""CalDAV discovery and calendar-query for Yandex; writes in writes.py."""
 import hashlib
 import xml.etree.ElementTree as ET
 from urllib.parse import urljoin,urlparse
@@ -65,14 +65,14 @@ def discover(session):
             calendars.append({'id':'yandex:'+hashlib.sha256(url.encode()).hexdigest()[:16],'name':p.findtext('d:displayname',default='Яндекс',namespaces=NS) or 'Яндекс','url':url})
     return calendars
 
-def fetch_events(login,password,start,end):
+def fetch_events(login,password,start,end,include_private=False):
     with requests.Session() as session:
         session.auth=(login,password)
         session.headers['User-Agent']='LocalCalendarAggregator/1.0'
         calendars=discover(session);events=[]
         first=datetime.combine(start,time.min,TZ).astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
         last=datetime.combine(end,time.min,TZ).astimezone(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-        query=f'<c:calendar-query xmlns:d="DAV:" xmlns:c="{NS["c"]}"><d:prop><c:calendar-data/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:time-range start="{first}" end="{last}"/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>'
+        query=f'<c:calendar-query xmlns:d="DAV:" xmlns:c="{NS["c"]}"><d:prop><c:calendar-data/><d:getetag/></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:time-range start="{first}" end="{last}"/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>'
         for cal in calendars:
             root=xml_request(session,'REPORT',cal['url'],query,'1')
             for href,ps in props(root):
@@ -80,6 +80,6 @@ def fetch_events(login,password,start,end):
                     raw=p.findtext('c:calendar-data',namespaces=NS)
                     if raw:
                         for event in parse_events(raw.encode(),start,end):
-                            event.update(id=cal['id']+'|'+event['id'],calendarId=cal['id'],calendarName=cal['name'],provider='yandex')
+                            event.update(id=cal['id']+'|'+event['id'],stableId=cal['id']+'|'+event['stableId'],calendarId=cal['id'],calendarName=cal['name'],provider='yandex',remoteUri=safe_url(href,cal['url']),etag=p.findtext('d:getetag',default='',namespaces=NS))
                             events.append(event)
-        return events,[{k:v for k,v in c.items() if k!='url'} for c in calendars]
+        return events,calendars if include_private else [{k:v for k,v in c.items() if k!='url'} for c in calendars]
