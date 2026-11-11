@@ -50,7 +50,7 @@ final class DeviceCalendarPicker {
   if(busy)return;pending=new CancellationSignal();CancellationSignal token=pending;loading(true);status.setText("Заново читаем системный список…");
   new Thread(()->{try{
    List<DeviceCalendars.Entry> result=DeviceCalendars.read(a.getContentResolver(),false,token);
-   a.runOnUiThread(()->{if(!alive(token))return;rows.clear();rows.addAll(result);Set<String> present=new HashSet<>();for(DeviceCalendars.Entry e:rows)present.add(e.id);selected.retainAll(present);readTime=LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));loading(false);filter();});
+   a.runOnUiThread(()->{if(!alive(token))return;rows.clear();for(DeviceCalendars.Entry e:result)if(!DeviceWrites.exported(a,e.id))rows.add(e);Set<String> present=new HashSet<>();for(DeviceCalendars.Entry e:rows)present.add(e.id);selected.retainAll(present);readTime=LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));loading(false);filter();});
   }catch(OperationCanceledException ignored){}catch(Exception e){a.runOnUiThread(()->{if(!alive(token))return;rows.clear();loading(false);filter();status.setText("Не удалось прочитать список. Откройте диагностику.");});}},"calendar-discovery").start();
  }
  boolean alive(CancellationSignal token){return !token.isCanceled()&&!a.isFinishing()&&!a.isDestroyed()&&dialog.isShowing();}
@@ -67,7 +67,7 @@ final class DeviceCalendarPicker {
  }
  void add(){
   if(selected.isEmpty()){a.toast("Выберите календарь");return;}
-  JSONArray choice=new JSONArray();for(String id:selected)choice.put(id);
+  Set<String> existing=new HashSet<>();JSONArray all=Store.array(Store.read(a),"accounts");for(int i=0;i<all.length();i++){JSONObject account=all.optJSONObject(i);if("device".equals(account.optString("type"))){JSONArray ids=account.optJSONArray("calendarIds");if(ids!=null)for(int j=0;j<ids.length();j++)existing.add(ids.optString(j));}}JSONArray choice=new JSONArray();for(String id:selected)if(!existing.contains(id))choice.put(id);if(choice.length()==0){a.toast("Эти календари уже подключены");return;}
   Store.edit(a,data->{JSONArray accounts=Store.array(data,"accounts");accounts.put(new JSONObject().put("id",UUID.randomUUID().toString()).put("type","device").put("calendarIds",choice).put("active",true));data.put("accounts",accounts);});dialog.dismiss();SyncJob.watch(a);a.render();Sync.async(a);
  }
 }

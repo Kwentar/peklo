@@ -30,7 +30,7 @@ public class TodayWidget extends AppWidgetProvider {
  static RemoteViews build(Context c,int id,LocalDate day,JSONObject data,int height){
   RemoteViews v=new RemoteViews(c.getPackageName(),R.layout.widget_today);LocalDate today=LocalDate.now(Event.ZONE);boolean compact=height<360;if(compact){v.setViewVisibility(R.id.widget_brand,android.view.View.GONE);v.setViewVisibility(R.id.widget_subtitle,android.view.View.GONE);v.setViewVisibility(R.id.widget_meta,android.view.View.GONE);}
   v.setTextViewText(R.id.widget_title,day.format(DateTimeFormatter.ofPattern("d MMMM",new Locale("ru"))));v.setTextViewText(R.id.widget_subtitle,(day.equals(today)?"Сегодня · ":"")+day.format(DateTimeFormatter.ofPattern("EEEE",new Locale("ru")))+" ▾");
-  v.setOnClickPendingIntent(R.id.widget_root,open(c,id,day,null,false));
+  v.setOnClickPendingIntent(R.id.widget_root,open(c,id,day,null,false));v.setOnClickPendingIntent(R.id.widget_blank,open(c,id,day,null,false));
   v.setOnClickPendingIntent(R.id.widget_prev,navigation(c,id,-1));v.setOnClickPendingIntent(R.id.widget_next,navigation(c,id,1));v.setOnClickPendingIntent(R.id.widget_today,navigation(c,id,0));v.setOnClickPendingIntent(R.id.widget_date,open(c,id,day,null,true));
   List<Event> events=new ArrayList<>();for(Event e:Sync.visible(data,false))if(e.on(day))events.add(e);
   Map<String,String> types=new HashMap<>();long last=Long.MAX_VALUE;int errors=0;boolean covered=true;JSONArray accounts=Store.array(data,"accounts");JSONObject statuses=Store.object(data,"statuses");long begin=day.atStartOfDay(Event.ZONE).toInstant().toEpochMilli(),finish=day.plusDays(1).atStartOfDay(Event.ZONE).toInstant().toEpochMilli();

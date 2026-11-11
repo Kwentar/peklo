@@ -1,1 +1,3 @@
-<TextView xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_spacer" android:layout_width="match_parent" android:layout_height="wrap_content" android:includeFontPadding="false"/>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content">
+<TextView android:id="@+id/widget_spacer" android:layout_width="match_parent" android:layout_height="wrap_content" android:includeFontPadding="false"/>
+</FrameLayout>
