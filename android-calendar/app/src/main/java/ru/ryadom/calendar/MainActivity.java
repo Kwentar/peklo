@@ -66,7 +66,7 @@ public class MainActivity extends Activity {
   for(Event e:events)if(e.allDay){TextView card=label("ВЕСЬ ДЕНЬ   "+e.title,12,ink,true);card.setPadding(dp(12),dp(10),dp(12),dp(10));int palette=CalendarStyle.color(data,e.source,e.calendar);card.setBackground(bg(CalendarStyle.FILLS[palette],CalendarStyle.ACCENTS[palette]));card.setOnClickListener(v->details(e));page.addView(card);gap(page,6);}
   final LocalDate drawnDay=day;final List<Event> timed=new ArrayList<>();for(Event e:events)if(!e.allDay)timed.add(e);
   final List<Block> drawnBlocks=blocks(timed,day.atStartOfDay(Event.ZONE).toInstant().toEpochMilli());final TimelineScale spacing=new TimelineScale(drawnBlocks,minuteHeight);
-  scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(false);scroll.setBackground(bg(Color.WHITE,0xffe2e9dc));FrameLayout timeline=new FrameLayout(this);int timelineHeight=dp(spacing.y(1440));timeline.setMinimumHeight(timelineHeight);scroll.addView(timeline,new ScrollView.LayoutParams(-1,timelineHeight));page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));timeline.addView(new Grid(this,spacing),new FrameLayout.LayoutParams(-1,timelineHeight));final ScrollView drawnScroll=scroll;
+  scroll=new ScrollView(this);scroll.setFillViewport(false);scroll.setVerticalScrollBarEnabled(false);scroll.setBackground(bg(Color.WHITE,0xffe2e9dc));FrameLayout timeline=new Timeline(this,spacing,drawnDay);int timelineHeight=dp(spacing.y(1440));timeline.setMinimumHeight(timelineHeight);scroll.addView(timeline,new ScrollView.LayoutParams(-1,timelineHeight));page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));timeline.addView(new Grid(this,spacing),new FrameLayout.LayoutParams(-1,timelineHeight));final ScrollView drawnScroll=scroll;
   timeline.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener(){public boolean onPreDraw(){timeline.getViewTreeObserver().removeOnPreDrawListener(this);int width=timeline.getWidth()-dp(56);long midnight=drawnDay.atStartOfDay(Event.ZONE).toInstant().toEpochMilli();Map<String,String> types=types(data);
    for(Block b:drawnBlocks){Event e=b.e;int palette=CalendarStyle.color(data,e.source,e.calendar);int color=CalendarStyle.FILLS[palette],accent=CalendarStyle.ACCENTS[palette];
     LinearLayout card=column();card.setPadding(dp(8),dp(2),dp(5),dp(2));card.setBackground(bg(color,accent));card.setClipChildren(true);
@@ -77,7 +77,16 @@ public class MainActivity extends Activity {
    }if(scroll==drawnScroll){drawnScroll.scrollTo(0,savedScroll);scrollReady=true;}return false;
   }});
  }
- class Grid extends View{Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);final TimelineScale spacing;Grid(Context c,TimelineScale spacing){super(c);this.spacing=spacing;}protected void onDraw(Canvas canvas){super.onDraw(canvas);p.setTextSize(dp(10));for(int h=0;h<24;h++){float y=dp(spacing.y(h*60));p.setColor(0xffe4eadf);canvas.drawLine(dp(48),y,getWidth(),y,p);p.setColor(0xfff1f4ed);canvas.drawLine(dp(48),dp(spacing.y(h*60+30)),getWidth(),dp(spacing.y(h*60+30)),p);p.setColor(0xff8d9a83);canvas.drawText(String.format(Locale.ROOT,"%02d:00",h),dp(5),y+dp(12),p);}if(day.equals(LocalDate.now(Event.ZONE))){ZonedDateTime now=ZonedDateTime.now(Event.ZONE);float y=dp(spacing.y(now.getHour()*60+now.getMinute()));p.setColor(0xffc4775b);canvas.drawLine(dp(48),y,getWidth(),y,p);canvas.drawCircle(dp(48),y,dp(3),p);}}}
+ class Grid extends View{Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);final TimelineScale spacing;Grid(Context c,TimelineScale spacing){super(c);this.spacing=spacing;}protected void onDraw(Canvas canvas){super.onDraw(canvas);p.setTextSize(dp(10));for(int h=0;h<24;h++){float y=dp(spacing.y(h*60));p.setColor(0xffe4eadf);canvas.drawLine(dp(48),y,getWidth(),y,p);p.setColor(0xfff1f4ed);canvas.drawLine(dp(48),dp(spacing.y(h*60+30)),getWidth(),dp(spacing.y(h*60+30)),p);p.setColor(0xff8d9a83);canvas.drawText(String.format(Locale.ROOT,"%02d:00",h),dp(5),y+dp(12),p);}}}
+ class Timeline extends FrameLayout {
+  final TimelineScale spacing;final LocalDate date;final Paint marker=new Paint(Paint.ANTI_ALIAS_FLAG);
+  Timeline(Context c,TimelineScale spacing,LocalDate date){super(c);this.spacing=spacing;this.date=date;}
+  @Override protected void dispatchDraw(Canvas canvas){
+   super.dispatchDraw(canvas);
+   if(date.equals(LocalDate.now(Event.ZONE))){ZonedDateTime now=ZonedDateTime.now(Event.ZONE);float y=dp(spacing.y(now.getHour()*60+now.getMinute()));marker.setColor(0xffc4775b);marker.setStrokeWidth(dp(1));canvas.drawLine(dp(48),y,getWidth(),y,marker);canvas.drawCircle(dp(48),y,dp(3),marker);postInvalidateDelayed(60000);}
+  }
+ }
+
  // Short idle intervals are compact separators; event durations retain their height.
  static class TimelineScale {
   final List<float[]> gaps=new ArrayList<>();final float rate;
